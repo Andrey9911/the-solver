@@ -1,0 +1,8 @@
+{
+    "AI":{
+        "👧Твой собеседник":"StartAssistentVoice",
+        "🔒 Public soc Network":"SendPromtForGenerate",
+        "📝 writingPromt": "SendPromt"
+    }
+    
+}

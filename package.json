@@ -2,7 +2,7 @@
   "name": "solver",
   "version": "1.0.0",
   "description": "solver mini app tg",
-  "main": "serverTest.js",
+  "main": "serverTest.mjs",
   "module": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -11,11 +11,22 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@ton/core": "^0.62.0",
+    "@ton/crypto": "^3.3.0",
+    "@ton/ton": "^16.1.0",
     "@twa-dev/sdk": "^7.10.1",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",
     "grammy": "^1.30.0",
+    "input": "^1.0.1",
+    "libphonenumber-js": "^1.12.26",
+    "mongoose": "^8.20.3",
+    "n8n-workflow": "^1.119.1",
     "openai": "^4.66.1",
-    "path": "^0.12.7"
+    "path": "^0.12.7",
+    "telegram": "^2.26.22"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
   }
 }

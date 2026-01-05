@@ -1,0 +1,14 @@
+// tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "NodeNext", // Или "ESNext"
+    "moduleResolution": "NodeNext", // Или "Node16"
+    "esModuleInterop": true,
+    "outDir": "./ts-compil", // Компилированные файлы пойдут сюда
+    "rootDir": "./ts", // Ваши исходные TS файлы здесь
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true
+  }
+}

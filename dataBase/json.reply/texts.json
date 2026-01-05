@@ -1,0 +1,18 @@
+{
+  "subscriptions": {
+    "Gemini": {
+      "title": "Gemini",
+      "price": 340,
+      "currency": "RUB",
+      "description": "Доступ к ИИ моделям: ChatGPT, Claude, Gemini...",
+      "is_active": true
+    },
+    "OpenAI": {
+      "title": "OpenAI",
+      "price": 100,
+      "currency": "RUB",
+      "description": "Доступ к передовым моделям: ChatGPT-4o...",
+      "is_active": true
+    }
+  }
+}
