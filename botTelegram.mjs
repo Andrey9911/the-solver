@@ -3,7 +3,9 @@ import {startMPTroto,functionSendCode,
     getDialogs,sendMessageToChat,
     checkSession,
     connectChannelForUpdate,
-    parsingJSON} 
+    parsingJSON,
+    createGroupManager,
+    downloadFiles} 
     from './scr/js/main.mjs';
 import {getCountAccounts,getTitleAccounts,saveOrderToFile, SendFile,removeFile} from './scr/js/work_data_base.mjs';
 import { getHolders } from './scr/js/logics.mjs';
@@ -28,15 +30,17 @@ import {inlineStartKeyboard,
     tgFuncKeyb,
     menuMarketPlaceFunc,
     getMenuGenerative,
-    choise
+    choise,
+    menegareGroup
     } from './scr/system-func/bot.system-reply.mjs';
 import { systemStartMessage,getOrderStatus,getMessageSubscription } from './scr/system-func/bot.system-message.mjs';
 
 
 import validateAndFormat from './scr/js/validNumber.mjs';
-import { json } from 'express';
+import { json, text } from 'express';
 import connectDB from './scr/js/db/connect.mjs';
 import User from './scr/js/db/schema.mjs';
+import { client } from 'telegram';
 
 
 // 1. Подключаемся к БД перед всем остальным
@@ -58,7 +62,11 @@ function initial() {
             name: '',
             role: 'user',
             bought_accounts: [],
-            currentStep: null
+            currentStep: null,
+            group: {
+                id: null,
+                title: ''
+            }
         })
         }
           // Массив для хранения купленных аккаунтов/услуг
@@ -77,6 +85,7 @@ JSON.stringify({"vev":4})
 
 
 //const menuGenerate = new InlineKeyboard()
+
 
 //вход в "базу данных"
 bot.callbackQuery('enterAccountBase',async e => {
@@ -275,11 +284,17 @@ bot.on("callback_query:data", async ctx => {
 
     const subscription = parsingJSON('subscriptions',false);
 
+    if(data === 'createPost'){
+        status = 'managementGroup_createPost';
+
+        ctx.reply('с фото или без?',{
+            reply_markup: choise('type_posting-isPhoto')
+        });
+    }
     if(data.startsWith('buyAccount_')){
         const accountType = data.match(/(?<=_).*/)[0];
         const pricing = subscription[accountType].price; 
         console.log('pricing = ');
-        console.log(data)
         
         // 1. Проверка баланса
         if(userSession.balance >= pricing){
@@ -367,7 +382,7 @@ bot.on("callback_query:data", async ctx => {
         status = 'YourCompanion';
     }
     if(data.startsWith('getAccout')){
-        console.log(subscription,data.match(/(?<=-).*/)[0]);
+        // console.log(subscription,data.match(/(?<=-).*/)[0]);
         const curr_subscription = subscription[data.match(/(?<=-).*/)[0]]
         // const subscription = data.match(/(?<=-).*/)[0];
         
@@ -400,9 +415,96 @@ bot.on("callback_query:data", async ctx => {
 
     }
     if(data === 'getChannel'){
-        ctx.reply('Введи название канала/бота');
+        ctx.editMessageText('давай узнаем, покажи твой канал',{
+            message_id: ctx.callbackQuery.message.message_id
+        });
         status = 'wait_channel_title';
+
+        let chats = await getDialogs();
+        
+        const myGroups = chats.filter(dialog => {
+            // console.log(dialog.entery);
+            
+            return (dialog.entery.creator === true)});
+            
+        if(myGroups.length === 0){
+            ctx.editMessageText(`у тебя нет групп, создай, напиши название`,{
+                message_id: ctx.callbackQuery.message.message_id
+            })
+            status = 'createGroup'
+        }
+        else{
+            ctx.editMessageText(`я вижу твою группу ${myGroups[0].title}, повелевай`,{
+                message_id: ctx.callbackQuery.message.message_id,
+                reply_markup: menegareGroup
+            })
+            ctx.session.user.group.title = '❤️BLOG AI Kate❤️'
+            status = 'managementGroup'
+        }
+        
     }
+
+    if(data === 'manager_menu'){
+
+    }
+    //публикация поста
+    if(data === 'id_publish-y'){
+        console.log(data);
+        
+        let message = ctx.update.callback_query.message.text || 'notText';
+        let photo = ctx.update.callback_query.message.photo || undefined;
+        let caption = ctx.update.callback_query.message.caption || undefined;
+        // await
+        // fetch(`https://generatesora2youtube-xdmen.amvera.io/webhook-test/e533822f-3d4b-4357-958a-60a67beb36c6`,{
+        //     method: 'POST',
+        //     headers: {
+        //         'Content-Type': 'application/json'
+        //     },
+        //     body: JSON.stringify({
+        //         "isPhoto": photo !== undefined ? true : false,
+        //         "message": message,
+        //         "photo": photo,
+        //         "caption": caption
+        //     })
+        // });
+        await ctx.reply('Пост опубликован! Молодец😊')
+        status = 'managementGroup'
+    };
+//Марки для публикации
+    if(data === 'id_type_posting-isPhoto-y'){
+        await ctx.reply('Отлично, пришли фото для поста, только не забудь про описание к нему)');
+        await ctx.reply('хочешь, чтобы я сгенерировала текст к фото за тебя?',{
+            reply_markup: choise('generating_caption_photo_flag-photo')
+        });
+        
+    }
+    if(data === 'id_type_posting-isPhoto-n'){
+        let message = ctx.update.callback_query.message.text || 'notText';
+        await ctx.reply(`Отлично, пришли текстик, который хочешь запостить`);
+        await ctx.reply('Или хочешь, чтобы я сгенерировала его за тебя?',{
+            reply_markup: choise('generating_caption_photo_flag-text')
+        });
+    }
+//----------------------
+    if(data === 'id_generating_caption_photo_flag-text-y'){
+        ctx.reply(`дай подсказку, что ты хочешь видеть в описании к фото. 
+            Если хочешь с фото, то скинь его также`);
+        status = 'managementGroup_generate_text';
+    }
+    if(data === 'id_generating_caption_photo_flag-text-n'){
+        ctx.reply('оки, тогда пищи сам');
+        status = 'managementGroup_createPost_text';
+    }
+  //----------------------  
+    if(data === 'id_generating_caption_photo_flag-photo-y'){
+        ctx.reply('оки, тогда просто пришли фото');
+        status = 'managementGroup_generate_photo-gen_text';
+    }
+    if(data === 'id_generating_caption_photo_flag-photo-n'){
+        ctx.reply('оки, тогда напиши описание под фото сам');
+        status = 'managementGroup_createPost_photo';
+    }
+
 
      if (data.startsWith("chat_")) {
         const chatId = Number(data.replace("chat_", ""));
@@ -416,15 +518,129 @@ bot.on("callback_query:data", async ctx => {
     }
 });
 bot.command("buttons", async (ctx) => {
+    console.log(ctx);
+    
   var keyboard = new InlineKeyboard()
     .text("Да", "btn1")   // первая кнопка
     .text("Нет", "btn2");  // вторая кнопка рядом
 
   
 });
+
+//SEND PHOTO
+bot.on("message:photo", async (ctx) => {
+  // Берём последнее фото из массива (оно самое крупное)
+  const photo = ctx.message.photo.pop();
+  const fileId = photo.file_id || undefined;
+  const caption = ctx.message.caption || undefined;
+  const file = await ctx.getFile(); // Получаем информацию о файле
+
+  if(status.startsWith('managementGroup_')){
+    let new_post_data = {
+        fileId: fileId,
+        caption: caption,
+        isPhoto:null
+    }
+        if(status === 'managementGroup_generate_photo-gen_text'){
+            let new_group = createGroupManager();
+            await new_group.init(ctx.session.user.group.title);
+            let new_post = {
+                title:null,
+                photo:null
+            }
+            new_post_data.isPhoto = true;
+        
+
+            ctx.reply(`Получил фото, провожу анализ...
+    Сейчас будет готов твой текст для подписи к фото`);    
+            let response = await fetch(`https://generatesora2youtube-xdmen.amvera.io/webhook-test/e533822f-3d4b-4357-958a-60a67beb36c6`,{
+            method: 'POST', // 1. Указываем метод
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    photo: fileId,
+                    caption: caption,
+                    isPhoto: new_post_data.isPhoto
+                })
+            })
+        }
+        if(status === 'managementGroup_createPost_photo'){
+            // let response = await fetch(`https://generatesora2youtube-xdmen.amvera.io/webhook-test/e533822f-3d4b-4357-958a-60a67beb36c6`,{
+            // method: 'POST', // 1. Указываем метод
+            //     headers: {
+            //         'Content-Type': 'application/json'
+            //     },
+            //     body: JSON.stringify({
+            //         photo: fileId,
+            //         message: caption,
+            //         isPhoto: true
+            //     })
+            // })
+        }
+        // let answer = await response.text();
+        // await ctx.reply('напиши описание к фото',{
+        //         caption:answer,
+        //         parse_mode:'HTML'
+        //     });
+            
+        await ctx.replyWithPhoto(fileId,{
+                reply_markup:choise('publish'),
+                parse_mode:'HTML',
+                caption:'`Публикуем?`'
+
+            })
+        console.log('сработал YourCompanion в режиме вебхука');
+
+  // Отправляем это же фото обратно по его file_id (это быстро и не тратит трафик)
+         status = 'managementGroup';
+    
+        }
+});
+
+//SEND TEXT
 bot.on("message:text", async(ctx) => {
     const text = ctx.message.text;
 
+    // Проверяем статус для определения контекста сообщения
+    if(status === 'managementGroup_generate_text'){
+        let response = await fetch(`https://generatesora2youtube-xdmen.amvera.io/webhook-test/e533822f-3d4b-4357-958a-60a67beb36c6`,{
+        method: 'POST', // 1. Указываем метод
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                message: text,
+                isPhoto: false
+            })
+        })
+    }
+
+    if(status === 'managementGroup_createPost_text'){
+        // let response = await fetch(`https://generatesora2youtube-xdmen.amvera.io/webhook-test/e533822f-3d4b-4357-958a-60a67beb36c6`,{
+        // method: 'POST', // 1. Указываем метод
+        //     headers: {
+        //         'Content-Type': 'application/json'
+        //     },
+        //     body: JSON.stringify({
+        //         photo: null,
+        //         message: text,
+        //         isPhoto: false
+        //     })
+        // })
+    }
+    //создание группы
+    if(status === 'createGroup'){
+        let new_group = createGroupManager();
+        ctx.session.user.group.id = new_group.getId();
+
+        await new_group.init(text, 'Группа создана через бота', true);
+        ctx.session.user.group.title = text;
+        await ctx.reply(`Группа ${text} создана!`);
+        await ctx.reply('Теперь можешь публиковать посты', {reply_markup: menegareGroup});
+
+        status = null;
+    }
     //подедржка
     if(ctx.session.user.currentStep === 'wait-text-trable'){
         const choiseKeyBoard = choise('receiving_data_by_email');

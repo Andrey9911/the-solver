@@ -3,9 +3,12 @@ import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions/index.js";
 // import { handler } from './telegram/handlers.mjs';
 import { NewMessage } from "telegram/events/index.js";
+import { TelegramGroup } from './telegram/tg_group.mjs';
 
 import * as fs from 'fs';
-import { log } from 'console';
+import path from 'path';
+import { create } from 'domain';
+import { text } from 'stream/consumers';
 
 dotenv.config();
 
@@ -19,7 +22,6 @@ let sessionString = "";
   const client = new TelegramClient(new StringSession(sessionString), apiId, apiHash, {
     connectionRetries: 5,
   });
-
 
 
   // const session = new StringSession(""); // можно сохранить строку после первого входа
@@ -40,6 +42,14 @@ async function ensureConnected() {
   }
 }
 
+
+async function  workFile(title_file,content){
+  const root_path = 'dataBase/clientTelegram/groups';
+  content = JSON.stringify(content);
+  
+  fs.writeFileSync(`${root_path}/${title_file}.txt`, content);
+  
+}
 export function parsingJSON(type,isButton){
   try{
     
@@ -52,8 +62,6 @@ export function parsingJSON(type,isButton){
         const category = JSON.parse(fs.readFileSync('./dataBase/json.reply/texts.json', 'utf8'));
 
 
-        console.log('data category');
-        console.log(category);
         return category[type];
       }
     }catch(err){
@@ -92,6 +100,7 @@ export async function startMPTroto(data_user){
     // Если сессия есть — просто подключаемся
     await client.connect();
   }
+  
   
   const messages = await client.getMessages(channel, { limit: 10 });
 
@@ -148,7 +157,7 @@ export async function sendMessageToChat(chatId, message) {
 export async function getDialogs(){
   console.log('===client===');
   
-  // console.log(client);
+
   
   await ensureConnected();  
   const dialogs = await client.getDialogs();
@@ -158,6 +167,8 @@ export async function getDialogs(){
   const chats = dialogs.map(d => ({
     id: d.id,
     title: d.title || d.firstName || d.username || "Без названия",
+    isChannel: d.isChannel,
+    entery: d.entity
   }));
   return chats;
 }
@@ -199,3 +210,69 @@ async function handler(event) {
       await client.sendMessage(message.chatId, {message: 'Привет,я твой друг'})
     }
 }
+
+//манипуляции с группой
+export function createGroupManager() {
+  const groupInstance = new TelegramGroup(client);
+
+  return {
+    init: async (title, about, isChannel = true) => {
+      const isFound = await findAndLink(title);
+
+      if (isFound) {
+        console.log('===groipINSTANCE===');
+        groupInstance.channelId = JSON.parse(fs.readFileSync(`dataBase/clientTelegram/groups/${title}.txt`, 'utf8')).title
+        console.log(groupInstance.channelId);
+        return groupInstance.channelId;
+      }
+
+      // Если не нашли — создаем новую
+      console.log("🆕 Группа не найдена, создаем новую...");
+      const channelObj = await groupInstance.create(title, about, isChannel);
+      workFile(title,channelObj.content)
+      return channelObj.result;
+    },
+
+    publish: async (text) => {
+      if (!groupInstance.channelId) throw new Error("Сначала вызовите .init()!");
+      return await groupInstance.publishPost(text);
+    },
+    publicPhoto: async (text,fileId) => {
+      if (!groupInstance.channelId) throw new Error("Сначала вызовите .init()!");
+      return await groupInstance.publicWithPhoto(text,fileId);
+    },
+    
+    //узнать текущий ID
+    getId: () => groupInstance.channelId
+  };
+}
+
+export async function downloadFiles(file) {
+  const savePath = path.join(__dirname, "downloads", `${file.file_unique_id}.jpg`);
+  
+  await file.download(savePath);
+}
+async function findAndLink(targetTitle) {
+        console.log(`🔍 Ищу группу "${targetTitle}" среди диалогов...`);
+        await ensureConnected();  
+        // Получаем диалоги (последние). 
+        // Если групп очень много, можно добавить опцию limit: 0 (все), но это будет дольше.
+        const dialogs = await client.getDialogs({});
+
+        // Ищем точное совпадение по названию
+        const foundDialog = dialogs.find(d => d.title === targetTitle);
+
+        if (foundDialog) {
+            // GramJS возвращает ID, который можно использовать для отправки
+            // letchannelId = foundDialog.entity.id; 
+            // let title = foundDialog.title;
+            // AccessHash часто нужен для внутренних методов, GramJS обычно кэширует его сам,
+            // но на всякий случай берем entity.
+            
+            console.log(`✅ Группа найдена! ID: ${foundDialog.id}`);
+            return true;
+        }
+
+        console.log("⚠️ Группа не найдена.");
+        return false;
+    }
