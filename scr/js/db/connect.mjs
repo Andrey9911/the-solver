@@ -9,7 +9,6 @@ const connectDB = async () => {
     console.log(`MongoDB подключена: ${conn.connection.host}`);
   } catch (error) {
     console.error(`Ошибка подключения к MongoDB: ${error.message}`);
-    process.exit(1); // Остановить бота, если базы нет
   }
 };
 

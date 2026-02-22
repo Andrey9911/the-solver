@@ -13,8 +13,9 @@ import {
 // Клавиатура в стартовом сообщении
 export const inlineStartKeyboard = new InlineKeyboard()
     .text("🤖 AI", "openGenerateMenu")
-    .text('🛍️ МаркетПлейс','openMarketPlace')
-    .text("🔒 ЗАЙТИ В TON ОБОЗРЕВАТЕЛЬ", "OpenTonEx").row()
+    // .text('🛍️ МаркетПлейс','openMarketPlace')
+    // .text("🔒 ЗАЙТИ В TON ОБОЗРЕВАТЕЛЬ", "OpenTonEx").row()
+    .text(' Зайти в Тг','enterTelegram')
     .text('👨🏻‍💻 Поддержка','support')
 
 // Главное клавиатура
@@ -26,8 +27,12 @@ export const keyboardStart = new Keyboard()
 
 // Клавиатура для основных функций админа в тг
 export const tgFuncKeyb = new InlineKeyboard()
-.text('просмотр чатов', 'showChats')
-.text('🧪 менеджер канала','getChannel')
+.text('просмотр чатов', 'showChats').row()
+.text('🧪 менеджер каналов','getChannels')
+.text('мониторинг групп-конкурентов','getPostsOtherChannel').row()
+.text('назад','back')
+
+
 
 
 // Клавиатура для развилки по тонам
@@ -50,7 +55,8 @@ export const menegareGroup = new InlineKeyboard()
   .text('🗑️ Удалить пост', 'deletePost')
   .row() // Можно добавить разделитель ряда для красоты
   .text('👁️ Просмотреть посты', 'viewPosts')
-  .text('✏️ Редактировать пост', 'editPost');
+  .text('✏️ Редактировать пост', 'editPost')
+  .text('запустить автопостинг','startAutoPosting').row()
 
 export function choise(id){
     console.log(id);
@@ -88,3 +94,14 @@ export function getMenuGenerative(buttons_AI){
     return menuGenerate;
 }
 
+export function getMenuMyChannel(buttons_groups){
+    let buttons = new InlineKeyboard();
+    const buttonsObj = buttons_groups.forEach((el,i, array) => {
+
+        buttons.text(el.title,'set_target_'+el.id).row();
+    })
+    buttons.text("Создать новую", "createGroup");
+    buttons.text("⬅️ Назад", "go_back");
+
+    return buttons;
+}

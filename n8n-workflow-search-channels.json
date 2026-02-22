@@ -1,0 +1,274 @@
+{
+  "name": "Поиск каналов по ключевому слову (продолжение getPostsOtherChannel-other)",
+  "nodes": [
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.callback_query?.message?.chat?.id }}",
+        "text": "🔍 Введи ключевое слово для поиска каналов в Telegram:",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1504, 680],
+      "id": "send-ask-keyword",
+      "name": "Спросить ключевое слово",
+      "credentials": {
+        "telegramApi": {
+          "id": "kiHshT1GW4AoX6ts",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://sportsmanly-gracelessly-lashell.ngrok-free.dev/api/n8n/set-waiting-keyword",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chatId: $('Telegram Trigger').item.json.callback_query?.message?.chat?.id, userId: $('Telegram Trigger').item.json.callback_query?.from?.id }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1704, 680],
+      "id": "http-set-waiting",
+      "name": "Сохранить ожидание ключа",
+      "continueOnFail": true,
+      "notesInFlow": true,
+      "notes": "Подключи сюда вывод Switch1 → output 4 (startsWith getPostsOtherChannel)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Telegram Trigger').item.json.message?.text }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "name": "filter.operator.notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1504, 800],
+      "id": "if-has-message-text",
+      "name": "Есть текст сообщения?",
+      "notesInFlow": true,
+      "notes": "Подключи сюда вывод Switch1 → fallback (когда callback не подошёл)"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://sportsmanly-gracelessly-lashell.ngrok-free.dev/api/n8n/check-waiting-keyword",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "chatId",
+              "value": "={{ $('Telegram Trigger').item.json.message?.chat?.id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1704, 720],
+      "id": "http-check-waiting",
+      "name": "Проверить ожидание"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.waiting }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1904, 720],
+      "id": "if-is-waiting",
+      "name": "Ждём ключевое слово?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://sportsmanly-gracelessly-lashell.ngrok-free.dev/api/n8n/clear-waiting-keyword",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chatId: $('Telegram Trigger').item.json.message?.chat?.id }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2104, 620],
+      "id": "http-clear-waiting",
+      "name": "Сбросить ожидание"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://sportsmanly-gracelessly-lashell.ngrok-free.dev/api/n8n/search-channels",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ keyword: $('Telegram Trigger').item.json.message?.text || '', limit: 20 }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2304, 620],
+      "id": "http-search-channels",
+      "name": "MTProto: поиск каналов"
+    },
+    {
+      "parameters": {
+        "jsCode": "const triggerData = $('Telegram Trigger').first().json;\nconst searchResult = $input.first().json;\nconst chatId = triggerData.message?.chat?.id;\n\nlet text = '🔍 Результаты поиска каналов:\\n\\n';\n\nif (searchResult.error) {\n  text = `❌ Ошибка: ${searchResult.error}`;\n} else if (!searchResult.channels || searchResult.channels.length === 0) {\n  text = 'По твоему запросу ничего не найдено 😕';\n} else {\n  searchResult.channels.slice(0, 15).forEach((ch, i) => {\n    const username = ch.username ? `@${ch.username}` : ch.title || 'Без username';\n    const link = ch.username ? `https://t.me/${ch.username}` : '';\n    text += `${i + 1}. ${ch.title || 'Канал'}\\n   ${username} ${link}\\n\\n`;\n  });\n  if (searchResult.channels.length > 15) {\n    text += `... и ещё ${searchResult.channels.length - 15} каналов`;\n  }\n}\n\nreturn { json: { chatId, text } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2504, 620],
+      "id": "format-results",
+      "name": "Форматировать результаты"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [2704, 620],
+      "id": "send-results",
+      "name": "Отправить результаты",
+      "credentials": {
+        "telegramApi": {
+          "id": "kiHshT1GW4AoX6ts",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Спросить ключевое слово": {
+      "main": [
+        [
+          {
+            "node": "Сохранить ожидание ключа",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Есть текст сообщения?": {
+      "main": [
+        [
+          {
+            "node": "Проверить ожидание",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Проверить ожидание": {
+      "main": [
+        [
+          {
+            "node": "Ждём ключевое слово?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ждём ключевое слово?": {
+      "main": [
+        [
+          {
+            "node": "Сбросить ожидание",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Сбросить ожидание": {
+      "main": [
+        [
+          {
+            "node": "MTProto: поиск каналов",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MTProto: поиск каналов": {
+      "main": [
+        [
+          {
+            "node": "Форматировать результаты",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Форматировать результаты": {
+      "main": [
+        [
+          {
+            "node": "Отправить результаты",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

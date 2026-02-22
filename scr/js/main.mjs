@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-import { TelegramClient } from "telegram";
+import { Api, TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions/index.js";
 // import { handler } from './telegram/handlers.mjs';
 import { NewMessage } from "telegram/events/index.js";
@@ -263,12 +263,6 @@ async function findAndLink(targetTitle) {
         const foundDialog = dialogs.find(d => d.title === targetTitle);
 
         if (foundDialog) {
-            // GramJS возвращает ID, который можно использовать для отправки
-            // letchannelId = foundDialog.entity.id; 
-            // let title = foundDialog.title;
-            // AccessHash часто нужен для внутренних методов, GramJS обычно кэширует его сам,
-            // но на всякий случай берем entity.
-            
             console.log(`✅ Группа найдена! ID: ${foundDialog.id}`);
             return true;
         }
@@ -276,3 +270,21 @@ async function findAndLink(targetTitle) {
         console.log("⚠️ Группа не найдена.");
         return false;
     }
+
+//получить список моих групп
+export async function getMyChannels(client) {
+  let chats = await getDialogs();
+        
+        const myGroups = chats.filter(dialog => {
+            // console.log(dialog.entery);
+            return (dialog.entery.creator === true)});
+      // Получаем каналы, где пользователь — админ
+      console.log(myGroups)
+      
+      
+      return myGroups.map(chat => ({
+          id: chat.id.toString(),
+          title: chat.title,
+          username: chat.username
+      }));
+  }

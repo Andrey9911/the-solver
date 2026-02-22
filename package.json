@@ -4,9 +4,12 @@
   "description": "solver mini app tg",
   "main": "serverTest.mjs",
   "module": "module",
+  "engines": { "node": ">=18" },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "run": "node serverTest.js"
+    "run": "node serverTest.mjs",
+    "bot": "node botTelegram.mjs",
+    "start": "node start.mjs"
   },
   "author": "",
   "license": "ISC",

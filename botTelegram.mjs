@@ -5,11 +5,13 @@ import {startMPTroto,functionSendCode,
     connectChannelForUpdate,
     parsingJSON,
     createGroupManager,
-    downloadFiles} 
+    downloadFiles,
+    getMyChannels
+} 
     from './scr/js/main.mjs';
 import {getCountAccounts,getTitleAccounts,saveOrderToFile, SendFile,removeFile} from './scr/js/work_data_base.mjs';
 import { getHolders } from './scr/js/logics.mjs';
-import { n8nStart } from './scr/js/n8n.mjs';
+import { n8nStart, toggleAutoPosting } from './scr/js/n8n.mjs';
 import { connectTonWallet, getWalletAddress } from './scr/js/tonAPI.mjs';
 
 dotenv.config();
@@ -31,20 +33,26 @@ import {inlineStartKeyboard,
     menuMarketPlaceFunc,
     getMenuGenerative,
     choise,
-    menegareGroup
+    menegareGroup,
+    getMenuMyChannel
     } from './scr/system-func/bot.system-reply.mjs';
 import { systemStartMessage,getOrderStatus,getMessageSubscription } from './scr/system-func/bot.system-message.mjs';
 
 
 import validateAndFormat from './scr/js/validNumber.mjs';
 import { json, text } from 'express';
-import connectDB from './scr/js/db/connect.mjs';
-import User from './scr/js/db/schema.mjs';
+// import {
+//     connectDB,
+//     getOrCreateUser,
+//     saveUserPost,
+//     getPostHistory,
+//     getAutoPostingStatus,
+//     updateAutoPostingStatus
+// } from './scr/js/db/users.db.mjs';
 import { client } from 'telegram';
 
 
-// 1. Подключаемся к БД перед всем остальным
-// (Используем top-level await, так как это .mjs)
+// Подключаемся к БД при запуске
 // await connectDB();
 
 
@@ -93,6 +101,16 @@ bot.callbackQuery('enterAccountBase',async e => {
         reply_markup:menuAdminBD
     })
 })
+
+bot.callbackQuery("getChannels", async (ctx) => {
+    // const result = await client.invoke(new Api.channels.getAdminedPublicChannels());
+    let gpruops = await getMyChannels(client)
+    await ctx.editMessageText('Список твоих групп. Выбирай', {
+        reply_markup: getMenuMyChannel(gpruops),
+        message_id: ctx.callbackQuery.message.message_id
+          });
+});
+
 
 //кнопка назад
 bot.callbackQuery("go_back", async (ctx) => {
@@ -228,29 +246,42 @@ bot.callbackQuery('postVoit', (e)=>{
 bot.command('start', async(ctx) => {
     ctx.session.currentStep = 'start';
     let id_message = await ctx.reply('Запускаю n8n...');
-    let object_n8n = await n8nStart(process.env.N8N_KEY, 'https://generatesora2youtube-xdmen.amvera.io','sZfsjXrGhwh8anFf')
-    .then(data => {
-        console.log(data);
+    
+    try {
+        const object_n8n = await n8nStart(process.env.N8N_KEY, 'https://generatesora2youtube-xdmen.amvera.io','sZfsjXrGhwh8anFf');
+        console.log(object_n8n);
         
-        if(!data.error){
-        ctx.editMessageText('Вы подключились',{
-            message_id: id_message.message_id,
-        });
-    }})
-    .catch(err => {
-        console.log(id_message);
-        ctx.editMessageText('Произошла ошибка при запуске n8n, попробуй позже',{
+        if(!object_n8n.error){
+            await ctx.editMessageText('Вы подключились',{
+                message_id: id_message.message_id,
+            });
+        } else {
+            await ctx.editMessageText('Произошла ошибка при запуске n8n, попробуй позже',{
+                message_id: id_message.message_id
+            });
+        }
+    } catch (err) {
+        console.error('Ошибка при запуске n8n:', err);
+        await ctx.editMessageText('Произошла ошибка при запуске n8n, попробуй позже',{
             message_id: id_message.message_id
         });
-    })
+    }
     
     
+    // Сохранение/обновление пользователя в БД
+    // await getOrCreateUser(ctx.chat.id, {
+    //     username: ctx.chat.username || null,
+    //     firstName: ctx.from?.first_name || null,
+    //     lastName: ctx.from?.last_name || null,
+    //     isPremium: ctx.from?.is_premium || false
+    // });
+
     //проверка, есть ли пользвователь в базе
     if(ctx.session.user.id == null){
         //проверка на владельца
         if(ctx.chat.id.toString() === process.env.OWNER_ID){
-            inlineStartKeyboard.text('Зайти в Тг','enterTelegram')
-            .text('🔒 Зайти в базу аккаунтов')
+            // inlineStartKeyboard.text('Зайти в Тг','enterTelegram')
+            // .text('🔒 Зайти в базу аккаунтов')
             ctx.reply('Приветствую, хозяин!');
             ctx.session.user.id = ctx.chat.id;
             ctx.session.user.name = ctx.chat.username || '';
@@ -414,39 +445,134 @@ bot.on("callback_query:data", async ctx => {
             });
 
     }
-    if(data === 'getChannel'){
-        ctx.editMessageText('давай узнаем, покажи твой канал',{
-            message_id: ctx.callbackQuery.message.message_id
-        });
-        status = 'wait_channel_title';
-
-        let chats = await getDialogs();
+    if(data.startsWith('set_target_')){
+        const curr_title = data.match(/(?<=-).*/)[0];
+        console.log(curr_title);
         
-        const myGroups = chats.filter(dialog => {
-            // console.log(dialog.entery);
+        status = 'wait_channel_title';
+        let myGroup = curr_title;
+        // let chats = await getDialogs();
+        
+        // const myGroups = chats.filter(dialog => {
+        //     // console.log(dialog.entery);
+        //     return (dialog.entery.creator === true)});
             
-            return (dialog.entery.creator === true)});
-            
-        if(myGroups.length === 0){
-            ctx.editMessageText(`у тебя нет групп, создай, напиши название`,{
-                message_id: ctx.callbackQuery.message.message_id
-            })
-            status = 'createGroup'
-        }
-        else{
-            ctx.editMessageText(`я вижу твою группу ${myGroups[0].title}, повелевай`,{
-                message_id: ctx.callbackQuery.message.message_id,
-                reply_markup: menegareGroup
-            })
-            ctx.session.user.group.title = '❤️BLOG AI Kate❤️'
-            status = 'managementGroup'
-        }
+        // if(myGroups.length === 0){
+        //     ctx.editMessageText(`у тебя нет групп, создай, напиши название`,{
+        //         message_id: ctx.callbackQuery.message.message_id
+        //     })
+        //     status = 'createGroup'
+        // }
+        // else{
+        //     ctx.editMessageText(`я вижу твою группу ${myGroups[0].title}, повелевай`,{
+        //         message_id: ctx.callbackQuery.message.message_id,
+        //         reply_markup: menegareGroup
+        //     })
+        //     ctx.session.user.group.title = myGroups[0].title
+        //     status = 'managementGroup'
+        // }
+        ctx.editMessageText(`я вижу твою группу ${myGroup}, повелевай`,{
+                    message_id: ctx.callbackQuery.message.message_id,
+                    reply_markup: menegareGroup
+                })
+                ctx.session.user.group.title = myGroup
+                status = 'managementGroup'
         
     }
 
     if(data === 'manager_menu'){
 
     }
+    
+    // Включить авто-постинг
+    if(data === 'startAutoPosting'){
+        await ctx.answerCallbackQuery('Включаю авто-постинг...');
+        
+        const userId = ctx.from.id;
+        const channelId = ctx.session.user.group.id || null;
+        const channelTitle = ctx.session.user.group.title || null;
+        
+        // Получаем webhook URL из переменной окружения или БД
+        const webhookUrl = 'https://generatesora2youtube-xdmen.amvera.io/webhook/71db4a21-61da-40f9-9aad-f0a441004c3d';
+        
+        if(!webhookUrl){
+            await ctx.reply('❌ Ошибка: Webhook URL для авто-постинга не настроен. Пожалуйста, добавьте переменную N8N_AUTOPOSTING_WEBHOOK_URL в .env файл.');
+            return;
+        }
+        
+        // Отправляем запрос в n8n
+        const result = await toggleAutoPosting(webhookUrl, true, {
+            channelId: channelId,
+            channelTitle: channelTitle,
+            userId: userId,
+            timeInterval: 10000, // переменная интервала, раз в сколько милисекунд срабатывать
+            isMedia: 0, //0 - false; 1 - true always; 2 - random
+
+        });
+        
+        // Обновляем статус в БД
+        if(result.success){
+            await updateAutoPostingStatus(userId, true, {
+                channelId,
+                channelTitle,
+                webhookUrl
+            });
+        }
+        
+        if(result.success){
+            await ctx.reply(
+                `✅ **Авто-постинг включен!**\n\n` +
+                `Канал: ${channelTitle || 'Не указан'}\n` +
+                `Автоматическая публикация постов запущена через n8n.`,
+                {
+                    // message_id: ctx.callbackQuery.message.message_id,
+                    parse_mode: 'Markdown',
+                    // reply_markup: getMenegareGroupMenu(true)
+                }
+            );
+        } else {
+            await ctx.reply(`❌ Ошибка при включении авто-постинга: ${result.message || 'Неизвестная ошибка'}`);
+        }
+    }
+    
+    // Выключить авто-постинг
+    if(data === 'disableAutoPosting'){
+        await ctx.answerCallbackQuery('Выключаю авто-постинг...');
+        
+        const userId = ctx.from.id;
+        const autoPostingStatus = await getAutoPostingStatus(userId);
+        const webhookUrl = autoPostingStatus.webhookUrl || process.env.N8N_AUTOPOSTING_WEBHOOK_URL;
+        
+        if(!webhookUrl){
+            await ctx.reply('❌ Ошибка: Webhook URL не найден.');
+            return;
+        }
+        
+        // Отправляем запрос в n8n для остановки
+        const result = await toggleAutoPosting(webhookUrl, false, {
+            channelId: autoPostingStatus.channelId,
+            channelTitle: autoPostingStatus.channelTitle,
+            userId: userId
+        });
+        
+        // Обновляем статус в БД
+        const dbUpdated = await updateAutoPostingStatus(userId, false);
+        
+        if(result.success && dbUpdated){
+            await ctx.editMessageText(
+                `⏸️ **Авто-постинг выключен**\n\n` +
+                `Автоматическая публикация постов остановлена.`,
+                {
+                    message_id: ctx.callbackQuery.message.message_id,
+                    parse_mode: 'Markdown',
+                    reply_markup: menegareGroup
+                }
+            );
+        } else {
+            await ctx.reply(`❌ Ошибка при выключении авто-постинга: ${result.message || 'Неизвестная ошибка'}`);
+        }
+    }
+    
     //публикация поста
     if(data === 'id_publish-y'){
         console.log(data);
@@ -454,19 +580,18 @@ bot.on("callback_query:data", async ctx => {
         let message = ctx.update.callback_query.message.text || 'notText';
         let photo = ctx.update.callback_query.message.photo || undefined;
         let caption = ctx.update.callback_query.message.caption || undefined;
-        // await
-        // fetch(`https://generatesora2youtube-xdmen.amvera.io/webhook-test/e533822f-3d4b-4357-958a-60a67beb36c6`,{
-        //     method: 'POST',
-        //     headers: {
-        //         'Content-Type': 'application/json'
-        //     },
-        //     body: JSON.stringify({
-        //         "isPhoto": photo !== undefined ? true : false,
-        //         "message": message,
-        //         "photo": photo,
-        //         "caption": caption
-        //     })
-        // });
+        const photoFileId = photo ? (Array.isArray(photo) ? photo[photo.length - 1]?.file_id : photo.file_id) : null;
+
+        // Сохраняем пост в БД
+        await saveUserPost(ctx.from.id, {
+            type: photo ? 'photo' : 'text',
+            text: message !== 'notText' ? message : null,
+            caption: caption || null,
+            photoFileId: photoFileId,
+            channelId: ctx.session.user?.group?.id || null,
+            channelTitle: ctx.session.user?.group?.title || null
+        });
+
         await ctx.reply('Пост опубликован! Молодец😊')
         status = 'managementGroup'
     };
@@ -565,43 +690,21 @@ bot.on("message:photo", async (ctx) => {
                 })
             })
         }
-        if(status === 'managementGroup_createPost_photo'){
-            // let response = await fetch(`https://generatesora2youtube-xdmen.amvera.io/webhook-test/e533822f-3d4b-4357-958a-60a67beb36c6`,{
-            // method: 'POST', // 1. Указываем метод
-            //     headers: {
-            //         'Content-Type': 'application/json'
-            //     },
-            //     body: JSON.stringify({
-            //         photo: fileId,
-            //         message: caption,
-            //         isPhoto: true
-            //     })
-            // })
-        }
-        // let answer = await response.text();
-        // await ctx.reply('напиши описание к фото',{
-        //         caption:answer,
-        //         parse_mode:'HTML'
-        //     });
             
         await ctx.replyWithPhoto(fileId,{
                 reply_markup:choise('publish'),
                 parse_mode:'HTML',
-                caption:'`Публикуем?`'
+                caption:'Публикуем?'
 
             })
-        console.log('сработал YourCompanion в режиме вебхука');
-
+        console.log('сработал YourCompanion в режиме вебхука')
   // Отправляем это же фото обратно по его file_id (это быстро и не тратит трафик)
          status = 'managementGroup';
-    
         }
 });
-
-//SEND TEXT
+//SEND tEXT
 bot.on("message:text", async(ctx) => {
     const text = ctx.message.text;
-
     // Проверяем статус для определения контекста сообщения
     if(status === 'managementGroup_generate_text'){
         let response = await fetch(`https://generatesora2youtube-xdmen.amvera.io/webhook-test/e533822f-3d4b-4357-958a-60a67beb36c6`,{
@@ -617,6 +720,11 @@ bot.on("message:text", async(ctx) => {
     }
 
     if(status === 'managementGroup_createPost_text'){
+        ctx.reply(`${text}
+            Публикуем?`,
+        {
+            reply_markup: choise('publish')
+        })
         // let response = await fetch(`https://generatesora2youtube-xdmen.amvera.io/webhook-test/e533822f-3d4b-4357-958a-60a67beb36c6`,{
         // method: 'POST', // 1. Указываем метод
         //     headers: {
@@ -784,4 +892,5 @@ bot.callbackQuery("btn2", async(ctx)=>{
 });
 
 
-bot.start();
+// bot.start();
+webhookCallback(bot,'express');
