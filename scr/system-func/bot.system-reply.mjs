@@ -13,10 +13,11 @@ import {
 // Клавиатура в стартовом сообщении
 export const inlineStartKeyboard = new InlineKeyboard()
     .text("🤖 AI", "openGenerateMenu")
+    .text('👨🏻‍💻 Поддержка','support').row()
     // .text('🛍️ МаркетПлейс','openMarketPlace')
     // .text("🔒 ЗАЙТИ В TON ОБОЗРЕВАТЕЛЬ", "OpenTonEx").row()
-    .text(' Зайти в Тг','enterTelegram')
-    .text('👨🏻‍💻 Поддержка','support')
+    .text("💰 Торговля", "start_analysis")
+    .text('💬 Зайти в Тг','enterTelegram')
 
 // Главное клавиатура
 export const keyboardStart = new Keyboard()
@@ -27,9 +28,9 @@ export const keyboardStart = new Keyboard()
 
 // Клавиатура для основных функций админа в тг
 export const tgFuncKeyb = new InlineKeyboard()
-.text('просмотр чатов', 'showChats').row()
+.text(' просмотр чатов', 'showChats').row()
 .text('🧪 менеджер каналов','getChannels')
-.text('мониторинг групп-конкурентов','getPostsOtherChannel').row()
+.text('🔍 мониторинг групп-конкурентов','getPostsOtherChannel').row()
 .text('назад','back')
 
 
@@ -52,11 +53,10 @@ export const variantCreate = new InlineKeyboard()
 
 export const menegareGroup = new InlineKeyboard()
   .text('📝 Создать пост', 'createPost')
-  .text('🗑️ Удалить пост', 'deletePost')
-  .row() // Можно добавить разделитель ряда для красоты
-  .text('👁️ Просмотреть посты', 'viewPosts')
-  .text('✏️ Редактировать пост', 'editPost')
-  .text('запустить автопостинг','startAutoPosting').row()
+  .text('📝 Give an idea', 'giveIdea').row()
+  .text('🧠 Knowledge base', 'knowledgeBase').row()
+  .text('📊 Comment analytics', 'commentAnalytics').row()
+  .text('запустить автопостинг','startAutoPosting').row();
 
 export function choise(id){
     console.log(id);
@@ -93,6 +93,21 @@ export function getMenuGenerative(buttons_AI){
     });
     return menuGenerate;
 }
+
+// bot.system-reply.mjs
+
+export function getAutoPostingConfigMenu(config) {
+    const mediaLabels = { 0: "🎲 Рандом", 1: "✅ Есть", 2: "❌ Нет" };
+    // Проверяем статус из сессии для текста кнопки
+    const autoPostLabel = config.autoposting ? "✅ Автопостинг запущен" : "🚀 Запустить автопостинг";
+    
+    return new InlineKeyboard()
+        .text(`Медиа: ${mediaLabels[config.isMedia]}`, "toggle_isMedia").row()
+        .text(`Интервал: ${config.interval} сек.`, "set_interval_val").row()
+        .text(autoPostLabel, "confirm_autoposting").row() // Динамический текст
+        .text("⬅️ Назад", "cancelAction");
+}
+
 
 export function getMenuMyChannel(buttons_groups){
     let buttons = new InlineKeyboard();

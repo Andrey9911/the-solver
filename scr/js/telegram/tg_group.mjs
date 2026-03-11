@@ -1,6 +1,6 @@
-import { TelegramClient } from "telegram";
+// import { TelegramClient } from '../main.mjs';
 import { StringSession } from "telegram/sessions/index.js";
-import { Api } from "telegram";
+import { Api,TelegramClient } from "telegram";
 
 
 export class TelegramGroup {
@@ -22,7 +22,6 @@ export class TelegramGroup {
      * @param {boolean} isChannel - true для канала, false для группы
      */
     async create(title, about = "", isChannel = true) {
-        await ensureConnected();  // Убедимся, что клиент подключен
         try {
             const result = await this.client.invoke(
                 new Api.channels.CreateChannel({
@@ -128,7 +127,6 @@ export class TelegramGroup {
      * @param {number} messageId 
      */
     async deletePost(messageId) {
-        await ensureConnected();  // Убедимся, что клиент подключен
         try {
             await this.client.deleteMessages(this.channelId, [messageId], {
                 revoke: true,

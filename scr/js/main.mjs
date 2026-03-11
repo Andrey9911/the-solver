@@ -7,6 +7,9 @@ import { TelegramGroup } from './telegram/tg_group.mjs';
 
 import * as fs from 'fs';
 import path from 'path';
+
+import { BSON } from "bson";
+
 import { create } from 'domain';
 import { text } from 'stream/consumers';
 
@@ -272,19 +275,120 @@ async function findAndLink(targetTitle) {
     }
 
 //получить список моих групп
-export async function getMyChannels(client) {
-  let chats = await getDialogs();
+export async function getMyChannels(client, id) {
+  // Получаем все диалоги
+  let chats = await getDialogs(client); 
+  
+  const myGroups = chats.filter(dialog => {
+      const dialogId = dialog.id.toJSNumber();
+
+      // Если ID не передан (undefined) -> возвращаем только те, где я создатель
+      if (id === undefined) {
+          return dialog.entery.creator === true;
+      } 
+      
+      // Если ID передан -> возвращаем либо этот конкретный канал, 
+      // либо все каналы, где я создатель (чтобы список не пустел)
+      // Приводим id к числу на случай, если пришла строка
+      return (dialog.entery.creator === true || dialogId === Number(id));
+  });
+
+  console.log(`Найдено каналов: ${myGroups.length}`);
+
+  return myGroups.map(chat => ({
+      id: chat.id.toString(), // Преобразуем в строку для callback_data
+      title: chat.title,
+      username: chat.entery.username || 'no_username'
+  }));
+}
+
+/**
+ * Configuration
+ */
+const channelIdentifier = process.env.CHANNEL; // username or channel ID
+
+//Fetch last N text posts from a Telegram channel
+
+export async function fetchPosts(channel, limit = 10) {
+    try {
+        const entity = await client.getEntity(channel);
+        const messages = await client.getMessages(entity, {
+            limit: undefined // fetch extra to filter properly
+        });
+        const textPosts = [];
         
-        const myGroups = chats.filter(dialog => {
-            // console.log(dialog.entery);
-            return (dialog.entery.creator === true)});
-      // Получаем каналы, где пользователь — админ
-      console.log(myGroups)
-      
-      
-      return myGroups.map(chat => ({
-          id: chat.id.toString(),
-          title: chat.title,
-          username: chat.username
-      }));
+        for (const message of messages) {
+            // Ignore service/system messages
+            if (message instanceof Api.MessageService) continue;
+            // Ignore empty messages
+            if (!message.message || message.message.trim() === "") continue;
+            textPosts.push(message.message);
+
+            if (textPosts.length >= limit) break;
+        }
+        //сохранение все в бинарный вид для векторных данных
+        saveToJson(textPosts);
+
+        return textPosts;
+    } catch (error) {
+        console.error("Error fetching posts:", error);
+        throw error;
+    }
+}
+
+/**
+ * Save dataset to JSON file
+ */
+async function saveToJson(data, filename = "style_dataset.json") {
+    try {
+
+        const json = JSON.stringify(data, null, 2);
+        await fs.writeFile(filename, json, "utf-8",(err) => {
+          if (err) throw err;
+        });
+        console.log(`Saved JSON dataset to ${filename}`);
+
+    } catch (error) {
+        console.error("Error saving JSON:", error);
+        throw error;
+    }
+}
+
+/**
+ * Convert JSON data to binary format (Buffer or BSON)
+ */
+async function convertToBinary(data, filename = "style_dataset.bin") {
+    try {
+        // Using BSON serialization for structured binary storage
+        const bsonData = BSON.serialize({ posts: data });
+        const buffer = Buffer.from(bsonData);
+
+        await fs.writeFile(filename, buffer);
+        console.log(`Saved binary dataset to ${filename}`);
+    } catch (error) {
+        console.error("Error converting to binary:", error);
+        throw error;
+    }
+}
+
+/**
+ * Create system_prompt.json file
+ */
+async function createSystemPrompt(system_prompt) {
+    try {
+        const systemPrompt = {
+            instruction: system_prompt || "You are a neural network trained to replicate the stylistic and structural patterns found in the provided dataset. Preserve tone, vocabulary, formatting, and writing rhythm."
+        };
+
+        await fs.writeFile(
+            "system_prompt.json",
+            JSON.stringify(systemPrompt, null, 2),
+            "utf-8"
+        );
+
+        console.log("Saved system_prompt.json");
+    } catch (error) {
+        console.error("Error creating system prompt:", error);
+        throw error;
+    }
   }

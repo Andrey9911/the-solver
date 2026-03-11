@@ -4,7 +4,9 @@
   "description": "solver mini app tg",
   "main": "serverTest.mjs",
   "module": "module",
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "run": "node serverTest.mjs",
@@ -18,6 +20,8 @@
     "@ton/crypto": "^3.3.0",
     "@ton/ton": "^16.1.0",
     "@twa-dev/sdk": "^7.10.1",
+    "ccxt": "^4.5.40",
+    "crypto": "^1.0.1",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",
     "grammy": "^1.30.0",

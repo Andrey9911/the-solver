@@ -6,7 +6,8 @@ import {startMPTroto,functionSendCode,
     parsingJSON,
     createGroupManager,
     downloadFiles,
-    getMyChannels
+    getMyChannels,
+    fetchPosts
 } 
     from './scr/js/main.mjs';
 import {getCountAccounts,getTitleAccounts,saveOrderToFile, SendFile,removeFile} from './scr/js/work_data_base.mjs';
@@ -38,7 +39,6 @@ import {inlineStartKeyboard,
     } from './scr/system-func/bot.system-reply.mjs';
 import { systemStartMessage,getOrderStatus,getMessageSubscription } from './scr/system-func/bot.system-message.mjs';
 
-
 import validateAndFormat from './scr/js/validNumber.mjs';
 import { json, text } from 'express';
 // import {
@@ -50,7 +50,11 @@ import { json, text } from 'express';
 //     updateAutoPostingStatus
 // } from './scr/js/db/users.db.mjs';
 import { client } from 'telegram';
+import { error } from 'console';
 
+import { managerMenuFunc } from './scr/js/manager_menu_func.mjs';
+import { autoposting } from './scr/js/telegram/autoposting.mjs';
+import { bybitModule } from './scr/js/bybit.mjs';
 
 // Подключаемся к БД при запуске
 // await connectDB();
@@ -65,6 +69,7 @@ function initial() {
     return {
         balance: 1500, // Начальный баланс в рублях (как в вашем примере)
         purchases: [],
+        status,
         user: new Object({
             id: null, 
             name: '',
@@ -74,6 +79,11 @@ function initial() {
             group: {
                 id: null,
                 title: ''
+            },
+            config: {
+                isMedia: 0, // 0 - рандом, 1 - есть, 2 - нет
+                interval: 60, // значение по умолчанию
+                autoposting: true
             }
         })
         }
@@ -82,6 +92,7 @@ function initial() {
         // temp_item_id: null,
     };
 bot.use(session({initial})); //Создаем сессию для нашего ботав этом чате
+bot.use(bybitModule).use(autoposting).use(managerMenuFunc);
 
 const new_func = new InlineKeyboard()
 .text('да','y')
@@ -102,6 +113,15 @@ bot.callbackQuery('enterAccountBase',async e => {
     })
 })
 
+bot.callbackQuery("createGroup", async (ctx) => {
+
+    status = 'createGroup';
+    await ctx.reply("Введите название для новой группы (или канала)",{
+        reply_markup: new InlineKeyboard().text("< Назад", "go_back")
+    });
+    await ctx.answerCallbackQuery();
+    return;
+});
 bot.callbackQuery("getChannels", async (ctx) => {
     // const result = await client.invoke(new Api.channels.getAdminedPublicChannels());
     let gpruops = await getMyChannels(client)
@@ -370,7 +390,7 @@ bot.on("callback_query:data", async ctx => {
                     removeFile(file.path);
 
                 } catch (error) {
-                    console.error("Ошибка при отправке файла:", error);
+                    console.error("ПОКУПКА АККАУНТА. Ошибка при отправке файла:", error);
                     await ctx.reply("Произошла ошибка при отправке файла.");
                 }
                 
@@ -390,7 +410,6 @@ bot.on("callback_query:data", async ctx => {
         
         // const data = e.callbackQuery.data.match(/(?<=-).*/)[0];
         const countAccounts = getCountAccounts(dataType);
-        console.log('accounts = ', dataType)
         
         // console.log(countAccounts);
         
@@ -420,7 +439,6 @@ bot.on("callback_query:data", async ctx => {
         
         const keyboard_account = new InlineKeyboard()
         .text('Купить','buyAccount_'+curr_subscription.title);
-        console.log('buyAccount_'+curr_subscription.title);
         
 
         ctx.editMessageText(getMessageSubscription(curr_subscription,getCountAccounts(data.match(/(?<=-).*/)[0]).count),
@@ -445,38 +463,45 @@ bot.on("callback_query:data", async ctx => {
             });
 
     }
+
+
     if(data.startsWith('set_target_')){
-        const curr_title = data.match(/(?<=-).*/)[0];
-        console.log(curr_title);
-        
-        status = 'wait_channel_title';
-        let myGroup = curr_title;
-        // let chats = await getDialogs();
-        
-        // const myGroups = chats.filter(dialog => {
-        //     // console.log(dialog.entery);
-        //     return (dialog.entery.creator === true)});
+
+        try {
+            let channelId = data.match(/(?<=-).*/)[0];
             
-        // if(myGroups.length === 0){
-        //     ctx.editMessageText(`у тебя нет групп, создай, напиши название`,{
-        //         message_id: ctx.callbackQuery.message.message_id
-        //     })
-        //     status = 'createGroup'
-        // }
-        // else{
-        //     ctx.editMessageText(`я вижу твою группу ${myGroups[0].title}, повелевай`,{
-        //         message_id: ctx.callbackQuery.message.message_id,
-        //         reply_markup: menegareGroup
-        //     })
-        //     ctx.session.user.group.title = myGroups[0].title
-        //     status = 'managementGroup'
-        // }
-        ctx.editMessageText(`я вижу твою группу ${myGroup}, повелевай`,{
-                    message_id: ctx.callbackQuery.message.message_id,
-                    reply_markup: menegareGroup
-                })
-                ctx.session.user.group.title = myGroup
-                status = 'managementGroup'
+            ctx.session.user.group.id = channelId;
+            console.log('channelId = ', channelId);
+            // Assuming getMyChannels returns objects with id and title
+            const current_group = await getMyChannels(client, new Number(channelId).valueOf());
+            
+            if (current_group && current_group.length > 0) {
+                 const channelTitle = current_group[0].title;
+                 
+                 // 1. Save channel_id and title in user's state (session)
+                 ctx.session.user.group.id = channelId;
+                 ctx.session.user.group.title = channelTitle;
+                 
+                 // Global status variable (though session is better, following existing pattern)
+                 status = 'managementGroup';
+
+                 // 2. Update the menu to show new management buttons
+                 await ctx.editMessageText(`Канал выбран: ${channelTitle}. Что хочешь сделать?`, {
+                     reply_markup: menegareGroup
+                 });
+
+                 // (Optional) Removing the immediate fetchPosts and webhook call here 
+                 // as it wasn't explicitly requested and might interfere with the new flow.
+                 // If you need it, you can keep it, but the prompt focused on menu update.
+            } else {
+                 await ctx.reply("Error: Channel not found.");
+            }
+            await ctx.answerCallbackQuery();
+        } catch (error) {
+            console.error(`Error in set_target_:`, error);
+            await ctx.reply("An error occurred while selecting the channel.");
+        }
+        return; // Important to return here
         
     }
 
@@ -485,55 +510,54 @@ bot.on("callback_query:data", async ctx => {
     }
     
     // Включить авто-постинг
-    if(data === 'startAutoPosting'){
-        await ctx.answerCallbackQuery('Включаю авто-постинг...');
+    // if(data === 'startAutoPosting'){
+    //     await ctx.answerCallbackQuery('Включаю авто-постинг...');
         
-        const userId = ctx.from.id;
-        const channelId = ctx.session.user.group.id || null;
-        const channelTitle = ctx.session.user.group.title || null;
+    //     const userId = ctx.from.id;
+    //     const channelId = ctx.session.user.group.id || null;
+    //     const channelTitle = ctx.session.user.group.title || null;
         
-        // Получаем webhook URL из переменной окружения или БД
-        const webhookUrl = 'https://generatesora2youtube-xdmen.amvera.io/webhook/71db4a21-61da-40f9-9aad-f0a441004c3d';
+    //     // Получаем webhook URL из переменной окружения или БД
+    //     const webhookUrl = 'https://generatesora2youtube-xdmen.amvera.io/webhook-test/marta-autopost';
         
-        if(!webhookUrl){
-            await ctx.reply('❌ Ошибка: Webhook URL для авто-постинга не настроен. Пожалуйста, добавьте переменную N8N_AUTOPOSTING_WEBHOOK_URL в .env файл.');
-            return;
-        }
+    //     if(!webhookUrl){
+    //         await ctx.reply('❌ Ошибка: Webhook URL для авто-постинга не настроен. Пожалуйста, добавьте переменную N8N_AUTOPOSTING_WEBHOOK_URL в .env файл.');
+    //         return;
+    //     }
         
-        // Отправляем запрос в n8n
-        const result = await toggleAutoPosting(webhookUrl, true, {
-            channelId: channelId,
-            channelTitle: channelTitle,
-            userId: userId,
-            timeInterval: 10000, // переменная интервала, раз в сколько милисекунд срабатывать
-            isMedia: 0, //0 - false; 1 - true always; 2 - random
+    //     // Отправляем запрос в n8n
+    //     const result = await toggleAutoPosting(webhookUrl, true, {
+    //         channelId: channelId,
+    //         timeInterval: 10000, // переменная интервала, раз в сколько милисекунд срабатывать
+    //         isMedia: 0, //0 - false; 1 - true always; 2 - random
+    //         autoposting: true,
 
-        });
+    //     });
         
-        // Обновляем статус в БД
-        if(result.success){
-            await updateAutoPostingStatus(userId, true, {
-                channelId,
-                channelTitle,
-                webhookUrl
-            });
-        }
+    //     // Обновляем статус в БД
+    //     if(result.success){
+    //         await updateAutoPostingStatus(userId, true, {
+    //             channelId,
+    //             channelTitle,
+    //             webhookUrl
+    //         });
+    //     }
         
-        if(result.success){
-            await ctx.reply(
-                `✅ **Авто-постинг включен!**\n\n` +
-                `Канал: ${channelTitle || 'Не указан'}\n` +
-                `Автоматическая публикация постов запущена через n8n.`,
-                {
-                    // message_id: ctx.callbackQuery.message.message_id,
-                    parse_mode: 'Markdown',
-                    // reply_markup: getMenegareGroupMenu(true)
-                }
-            );
-        } else {
-            await ctx.reply(`❌ Ошибка при включении авто-постинга: ${result.message || 'Неизвестная ошибка'}`);
-        }
-    }
+    //     if(result.success){
+    //         await ctx.reply(
+    //             `✅ **Авто-постинг включен!**\n\n` +
+    //             `Канал: ${channelTitle || 'Не указан'}\n` +
+    //             `Автоматическая публикация постов запущена через n8n.`,
+    //             {
+    //                 // message_id: ctx.callbackQuery.message.message_id,
+    //                 parse_mode: 'Markdown',
+    //                 // reply_markup: getMenegareGroupMenu(true)
+    //             }
+    //         );
+    //     } else {
+    //         await ctx.reply(`❌ Ошибка при включении авто-постинга: ${result.message || 'Неизвестная ошибка'}`);
+    //     }
+    // }
     
     // Выключить авто-постинг
     if(data === 'disableAutoPosting'){
@@ -739,7 +763,7 @@ bot.on("message:text", async(ctx) => {
     }
     //создание группы
     if(status === 'createGroup'){
-        let new_group = createGroupManager();
+        let new_group = createGroupManager(text);
         ctx.session.user.group.id = new_group.getId();
 
         await new_group.init(text, 'Группа создана через бота', true);
@@ -892,5 +916,6 @@ bot.callbackQuery("btn2", async(ctx)=>{
 });
 
 
-// bot.start();
-webhookCallback(bot,'express');
+
+bot.start();
+export const botHandler = webhookCallback(bot,'express') || undefined;
