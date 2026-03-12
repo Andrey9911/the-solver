@@ -12,7 +12,7 @@ import { getAutoPostingConfigMenu } from "../../system-func/bot.system-reply.mjs
   
   export const autoposting = new Composer();
 
-  autoposting.on("callback_query:data", async ctx => {
+  autoposting.on("callback_query:data", async (ctx,next) => {
     const data = ctx.callbackQuery.data;
     console.log('==АВТОПОСТИНГ НАСТРОЙКИ==');
     console.log(data);
@@ -55,7 +55,7 @@ import { getAutoPostingConfigMenu } from "../../system-func/bot.system-reply.mjs
             channel_id: ctx.session.user.group.id
         };
 
-        if (!config.autoposting) {
+        if (!finalConfig.autoposting) {
 
         
             try {
@@ -79,7 +79,7 @@ import { getAutoPostingConfigMenu } from "../../system-func/bot.system-reply.mjs
                     // await n8nStop(ctx.session.user.group.id);
                     
                     await ctx.answerCallbackQuery("Автопостинг остановлен ❌");
-                    config.autoposting = false
+                    finalConfig.autoposting = false
                 } catch (e) {
                     return await ctx.answerCallbackQuery("Ошибка при остановке");
                 }
@@ -89,9 +89,10 @@ import { getAutoPostingConfigMenu } from "../../system-func/bot.system-reply.mjs
         await ctx.answerCallbackQuery();
         return;
     }
+    return next();
   })
   
-  autoposting.on("message:text", async ctx => {
+  autoposting.on("message:text", async (ctx,next) => {
     if (ctx.session.status === 'wait_interval') {
         const seconds = parseInt(text);
         
@@ -108,6 +109,7 @@ import { getAutoPostingConfigMenu } from "../../system-func/bot.system-reply.mjs
         });
         return;
     }
+    return next()
   }
 
 )

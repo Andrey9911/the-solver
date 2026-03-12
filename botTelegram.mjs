@@ -92,7 +92,16 @@ function initial() {
         // temp_item_id: null,
     };
 bot.use(session({initial})); //Создаем сессию для нашего ботав этом чате
-bot.use(bybitModule).use(autoposting).use(managerMenuFunc);
+
+bot.use(async (ctx, next) => {
+    if (ctx.message?.text?.startsWith('/')) {
+        console.log(`[Global] Command detected: ${ctx.message.text}. Resetting status.`);
+        ctx.session.status = 'idle'; 
+        // Не возвращаем здесь ответ, а просто пускаем дальше к обработчику команды
+    }
+    return next();
+});
+
 
 const new_func = new InlineKeyboard()
 .text('да','y')
@@ -247,6 +256,17 @@ bot.callbackQuery('postVoit', (e)=>{
     e.reply('вот новый пример\nхотел бы ты совершать прямо отсюда транзакции? ', {reply_markup: new_func});
 })
 
+bot.callbackQuery('cancelAction', async(ctx)=>{
+    ctx.session.status = 'managementGroup';
+     await ctx.editMessageText(`Действие отменено. Управление каналом: ${ctx.session.user.group.title}`, {
+         reply_markup: menegareGroup
+     });
+     await ctx.answerCallbackQuery();
+     return;
+})
+
+
+
 // bot.callbackQuery('category-Gemini', (e=>{
 //     const data = e.callbackQuery.data.match(/(?<=-).*/)[0];
 //     const countAccounts = getCountAccounts(data);
@@ -328,7 +348,7 @@ bot.command('start', async(ctx) => {
     console.log(ctx.chat);
     
 })
-bot.on("callback_query:data", async ctx => {
+bot.on("callback_query:data", async (ctx,next) => {
     const userId = ctx.from.id;
     const data = ctx.callbackQuery.data;
     const userSession = ctx.session;
@@ -665,6 +685,7 @@ bot.on("callback_query:data", async ctx => {
             force_reply: true,
         },})
     }
+    return next();
 });
 bot.command("buttons", async (ctx) => {
     console.log(ctx);
@@ -677,7 +698,7 @@ bot.command("buttons", async (ctx) => {
 });
 
 //SEND PHOTO
-bot.on("message:photo", async (ctx) => {
+bot.on("message:photo", async (ctx,next) => {
   // Берём последнее фото из массива (оно самое крупное)
   const photo = ctx.message.photo.pop();
   const fileId = photo.file_id || undefined;
@@ -725,9 +746,11 @@ bot.on("message:photo", async (ctx) => {
   // Отправляем это же фото обратно по его file_id (это быстро и не тратит трафик)
          status = 'managementGroup';
         }
-});
+        return next();
+}
+);
 //SEND tEXT
-bot.on("message:text", async(ctx) => {
+bot.on("message:text", async(ctx,next) => {
     const text = ctx.message.text;
     // Проверяем статус для определения контекста сообщения
     if(status === 'managementGroup_generate_text'){
@@ -902,7 +925,9 @@ bot.on("message:text", async(ctx) => {
             // });
         .catch(err => console.error(err));
     } 
-}});
+}
+    return next()
+});
 bot.callbackQuery("btn1", (ctx)=>{
     ctx.answerCallbackQuery("Тогда введи его. Не бойся)");
     return;
@@ -916,6 +941,22 @@ bot.callbackQuery("btn2", async(ctx)=>{
 });
 
 
-
+bot.use(bybitModule).use(autoposting).use(managerMenuFunc);
 bot.start();
 export const botHandler = webhookCallback(bot,'express') || undefined;
+bot.catch((err) => {
+    const ctx = err.ctx;
+    console.error(`Error while handling update ${ctx.update.update_id}:`);
+    
+    // Сбрасываем статус пользователя, у которого вылетела ошибка
+    if (ctx.session) ctx.session.status = 'idle';
+    
+    const e = err.error;
+    if (e instanceof GrammyError) {
+        console.error("Error in request:", e.description);
+    } else if (e instanceof HttpError) {
+        console.error("Could not contact Telegram:", e);
+    } else {
+        console.error("Unknown error:", e);
+    }
+});

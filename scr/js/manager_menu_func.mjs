@@ -1,11 +1,13 @@
 import { 
     Bot, InlineKeyboard,Composer
   } from "grammy";
+  import { client } from "telegram";
   import ccxt from "ccxt";
   import  {createHmac} from 'crypto';
   import dotenv from "dotenv";
   import { env } from "process";
   dotenv.config();
+  import { getChannelAnalytics360 } from "./telegram/analysator_channel.mjs";
   
   
   export const managerMenuFunc = new Composer();
@@ -13,7 +15,7 @@ import {
 managerMenuFunc.on("callback_query:data", async ctx => {
     const data = ctx.callbackQuery.data;
     if (data === 'giveIdea') {
-        status = 'wait_idea';
+        ctx.session.status = 'wait_idea';
         await ctx.editMessageText("Отправь свою идею как текст или голосовое сообщение.", {
             reply_markup: new InlineKeyboard().text("Cancel", "cancelAction")
         });
@@ -23,7 +25,7 @@ managerMenuFunc.on("callback_query:data", async ctx => {
     
     // Handle "Knowledge base"
     if (data === 'knowledgeBase') {
-        status = 'wait_kb_document';
+        ctx.session.status = 'wait_kb_document';
         await ctx.editMessageText("отправь PDF/DOCX файл, текстовый список или голосовое сообщение для базы знаний.", {
             reply_markup: new InlineKeyboard().text("Cancel", "cancelAction")
         });
@@ -33,21 +35,38 @@ managerMenuFunc.on("callback_query:data", async ctx => {
     
     // Handle "Comment analytics"
     if (data === 'commentAnalytics') {
-         await ctx.answerCallbackQuery("Fetching analytics...");
-         // Placeholder for database/API request
-         const channelId = ctx.session.user.group.id;
-         await ctx.reply(`Аналитика для канала ${channelId}:\nПоложительные: 60%\nНейтральные: 30%\nОтрицательные: 10%`);
-         return;
+        await ctx.answerCallbackQuery("Собираю данные... Это займет пару секунд ⏳");
+    
+        // Получаем ID/username канала из сессии
+        const channelId = ctx.session.user.group.id; 
+        
+        try {
+            const analyticsJson = await getChannelAnalytics360(channelId);
+            
+            // Отправляем сырой массив в n8n к ИИ-агенту
+            const n8nResponse = await fetch('https://generatesora2youtube-xdmen.amvera.io/webhook-test/telegram-bot-backend', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    type: 'analytics',
+                    user_id: ctx.from.id,
+                    channel_id: channelId,
+                    payload: analyticsJson
+                })
+            });
+            
+            // n8n может вернуть готовый текстовый ответ, который бот перешлет
+            const finalReport = await n8nResponse.json();
+            await ctx.reply(finalReport.report);
+            
+        } catch (e) {
+            await ctx.reply("Произошла ошибка при сборе данных.");
+            console.log(e);
+            
+        }
     }
     
-    if (data === 'cancelAction') {
-         status = 'managementGroup';
-         await ctx.editMessageText(`Действие отменено. Управление каналом: ${ctx.session.user.group.title}`, {
-             reply_markup: menegareGroup
-         });
-         await ctx.answerCallbackQuery();
-         return;
-    }
+    
 })
 
 // Файл: botTelegram.mjs
@@ -58,7 +77,7 @@ managerMenuFunc.on("message:text", async(ctx) => {
 
     // ... ваши существующие проверки статусов ...
 
-    if (status === 'wait_idea') {
+    if (ctx.session.status === 'wait_idea') {
         const channelId = ctx.session.user.group.id;
         await ctx.reply("Отправляю идею в n8n...");
         try {
@@ -71,11 +90,11 @@ managerMenuFunc.on("message:text", async(ctx) => {
         } catch (error) {
             await ctx.reply("❌ Ошибка отправки в n8n.");
         }
-        status = 'managementGroup'; // Возвращаем статус управления
+        ctx.session.status = 'managementGroup'; // Возвращаем статус управления
         return;
     }
 
-    if (status === 'wait_kb_document') {
+    if (ctx.session.status === 'wait_kb_document') {
         const channelId = ctx.session.user.group.id;
         await ctx.reply("Добавляю текст в базу знаний...");
         try {
@@ -89,7 +108,7 @@ managerMenuFunc.on("message:text", async(ctx) => {
         } catch (error) {
             await ctx.reply("❌ Ошибка обновления базы знаний.");
         }
-        status = 'managementGroup';
+        ctx.session.status = 'managementGroup';
         return;
     }
 });

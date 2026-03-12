@@ -22,7 +22,7 @@ let sessionString = "";
 
  checkSession()//проверка, была ли авторизация ранее
 
-  const client = new TelegramClient(new StringSession(sessionString), apiId, apiHash, {
+  export const client = new TelegramClient(new StringSession(sessionString), apiId, apiHash, {
     connectionRetries: 5,
   });
 
@@ -37,7 +37,7 @@ let sessionString = "";
 let data_user = {};
 let isConnected = false;
 
-async function ensureConnected() {
+export async function ensureConnected() {
   if (!isConnected) {
     await client.connect();
     isConnected = true;
